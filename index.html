@@ -1,0 +1,1310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GRIDLOCK — Agent Failure Series #18</title>
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --surface: #111118;
+    --border: #1e1e2e;
+    --accent: #f97316;
+    --accent2: #ef4444;
+    --accent3: #a78bfa;
+    --green: #22c55e;
+    --yellow: #eab308;
+    --text: #e2e8f0;
+    --muted: #64748b;
+    --code: #1e293b;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+    min-height: 100vh;
+    padding: 0 0 80px;
+  }
+
+  .hero {
+    background: linear-gradient(135deg, #0f0f1a 0%, #1a0a0a 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 48px 24px 40px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .hero::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 40px,
+      rgba(249,115,22,0.02) 40px,
+      rgba(249,115,22,0.02) 41px
+    );
+    pointer-events: none;
+  }
+
+  .series-badge {
+    display: inline-block;
+    background: rgba(249,115,22,0.12);
+    border: 1px solid rgba(249,115,22,0.3);
+    color: var(--accent);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 4px 12px;
+    border-radius: 4px;
+    margin-bottom: 20px;
+  }
+
+  .hero h1 {
+    font-size: clamp(42px, 8vw, 80px);
+    font-weight: 900;
+    letter-spacing: -0.02em;
+    color: #fff;
+    line-height: 1;
+    margin-bottom: 8px;
+  }
+
+  .hero h1 span { color: var(--accent); }
+
+  .hero-sub {
+    font-size: 14px;
+    color: var(--muted);
+    margin-bottom: 16px;
+    letter-spacing: 0.04em;
+  }
+
+  .hero-tagline {
+    font-size: 18px;
+    color: #94a3b8;
+    max-width: 600px;
+    margin: 0 auto 24px;
+    line-height: 1.6;
+  }
+
+  .hero-tagline strong { color: var(--accent); }
+
+  .hero-pain {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(239,68,68,0.1);
+    border: 1px solid rgba(239,68,68,0.25);
+    border-radius: 6px;
+    padding: 8px 16px;
+    font-size: 12px;
+    color: #fca5a5;
+  }
+
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent2);
+         animation: pulse 1.5s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(0.8)} }
+
+  .container { max-width: 960px; margin: 0 auto; padding: 0 20px; }
+
+  .section-header {
+    margin: 48px 0 24px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .section-number {
+    background: var(--accent);
+    color: #000;
+    font-size: 11px;
+    font-weight: 800;
+    width: 24px; height: 24px;
+    border-radius: 4px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .section-header h2 {
+    font-size: 20px;
+    font-weight: 700;
+    color: #fff;
+  }
+
+  .section-header .section-tag {
+    margin-left: auto;
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    background: var(--code);
+    padding: 3px 8px;
+    border-radius: 4px;
+  }
+
+  /* Agent Graph */
+  .agent-graph {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 32px 24px;
+    margin-bottom: 16px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .agent-graph-title {
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 24px;
+  }
+
+  .graph-canvas {
+    position: relative;
+    height: 200px;
+  }
+
+  .agent-node {
+    position: absolute;
+    background: var(--code);
+    border: 1.5px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 16px;
+    font-size: 12px;
+    font-weight: 700;
+    text-align: center;
+    transition: all 0.3s ease;
+    cursor: default;
+    min-width: 120px;
+  }
+
+  .agent-node.waiting {
+    border-color: var(--yellow);
+    background: rgba(234,179,8,0.08);
+    box-shadow: 0 0 20px rgba(234,179,8,0.15);
+  }
+
+  .agent-node.stuck {
+    border-color: var(--accent2);
+    background: rgba(239,68,68,0.08);
+    box-shadow: 0 0 20px rgba(239,68,68,0.2);
+    animation: stuck-pulse 2s ease-in-out infinite;
+  }
+
+  .agent-node.rescued {
+    border-color: var(--accent3);
+    background: rgba(167,139,250,0.08);
+  }
+
+  .agent-node.done {
+    border-color: var(--green);
+    background: rgba(34,197,94,0.08);
+  }
+
+  @keyframes stuck-pulse {
+    0%,100% { box-shadow: 0 0 20px rgba(239,68,68,0.2); }
+    50% { box-shadow: 0 0 40px rgba(239,68,68,0.4); }
+  }
+
+  .agent-node .node-name { font-size: 13px; font-weight: 800; margin-bottom: 4px; }
+  .agent-node .node-status { font-size: 10px; color: var(--muted); font-weight: 400; }
+  .agent-node.waiting .node-status { color: var(--yellow); }
+  .agent-node.stuck .node-status { color: var(--accent2); }
+
+  /* SVG arrows */
+  .graph-svg {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+  }
+
+  /* Panel layout */
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    margin-bottom: 20px;
+    overflow: hidden;
+  }
+
+  .panel-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .panel-header:hover { background: rgba(255,255,255,0.02); }
+
+  .panel-icon {
+    width: 32px; height: 32px;
+    border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px;
+    flex-shrink: 0;
+  }
+
+  .panel-icon.orange { background: rgba(249,115,22,0.12); }
+  .panel-icon.red { background: rgba(239,68,68,0.12); }
+  .panel-icon.purple { background: rgba(167,139,250,0.12); }
+  .panel-icon.yellow { background: rgba(234,179,8,0.12); }
+
+  .panel-title-group { flex: 1; }
+  .panel-title { font-size: 14px; font-weight: 700; color: #fff; margin-bottom: 2px; }
+  .panel-subtitle { font-size: 11px; color: var(--muted); }
+
+  .panel-expand {
+    width: 28px; height: 28px;
+    background: var(--code);
+    border-radius: 6px;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px;
+    transition: all 0.2s;
+  }
+  .panel-expand:hover { background: var(--border); color: var(--text); }
+
+  .panel-body { padding: 20px; display: none; }
+  .panel.open .panel-body { display: block; }
+  .panel.open .panel-expand { transform: rotate(180deg); }
+
+  /* Terminal/Log */
+  .log-block {
+    background: #000;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    padding: 16px;
+    font-size: 12px;
+    line-height: 1.7;
+    margin: 12px 0;
+    max-height: 280px;
+    overflow-y: auto;
+    min-height: 80px;
+  }
+
+  .log-line { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 2px; }
+  .log-ts { color: #334155; white-space: nowrap; flex-shrink: 0; }
+  .log-level { white-space: nowrap; flex-shrink: 0; font-weight: 700; }
+  .log-level.info { color: #38bdf8; }
+  .log-level.warn { color: var(--yellow); }
+  .log-level.error { color: var(--accent2); }
+  .log-level.ok { color: var(--green); }
+  .log-level.wait { color: #a78bfa; }
+  .log-msg { color: #94a3b8; word-break: break-word; }
+  .log-msg .hl { color: var(--accent); }
+  .log-msg .hl2 { color: var(--accent2); }
+  .log-msg .hl3 { color: #a78bfa; }
+  .log-msg .hlg { color: var(--green); }
+
+  .cursor-blink {
+    display: inline-block;
+    width: 8px; height: 13px;
+    background: var(--text);
+    vertical-align: middle;
+    animation: blink 1s step-end infinite;
+  }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+
+  /* Metric cards */
+  .metrics-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+    margin: 16px 0;
+  }
+
+  .metric-card {
+    background: var(--code);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+  }
+
+  .metric-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }
+  .metric-value { font-size: 22px; font-weight: 800; color: #fff; }
+  .metric-value.red { color: var(--accent2); }
+  .metric-value.yellow { color: var(--yellow); }
+  .metric-value.green { color: var(--green); }
+  .metric-unit { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+  /* Control buttons */
+  .controls { display: flex; gap: 10px; flex-wrap: wrap; margin: 16px 0 8px; }
+
+  .btn {
+    background: var(--code);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+    letter-spacing: 0.02em;
+  }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn.primary { background: var(--accent); color: #000; border-color: var(--accent); }
+  .btn.primary:hover { background: #fb923c; border-color: #fb923c; }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn:disabled:hover { border-color: var(--border); color: var(--text); }
+
+  /* Wait spinner */
+  .wait-animation {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    background: var(--code);
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin: 12px 0;
+    border: 1px solid var(--border);
+  }
+
+  .spinner {
+    width: 20px; height: 20px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    flex-shrink: 0;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .wait-text { font-size: 12px; color: var(--muted); }
+  .wait-text strong { color: var(--text); }
+
+  /* Code diff */
+  .code-block {
+    background: #000;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    padding: 16px;
+    font-size: 12px;
+    line-height: 1.7;
+    margin: 12px 0;
+    overflow-x: auto;
+  }
+
+  .code-comment { color: #4ade80; }
+  .code-keyword { color: #f97316; }
+  .code-string { color: #fbbf24; }
+  .code-error { color: #ef4444; }
+  .code-normal { color: #94a3b8; }
+  .code-line-bad { background: rgba(239,68,68,0.08); display: block; margin: 0 -16px; padding: 0 16px; border-left: 3px solid var(--accent2); }
+  .code-line-ok { background: rgba(34,197,94,0.05); display: block; margin: 0 -16px; padding: 0 16px; border-left: 3px solid var(--green); }
+
+  /* Cost counter */
+  .cost-counter {
+    background: rgba(239,68,68,0.06);
+    border: 1px solid rgba(239,68,68,0.2);
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin: 12px 0;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .cost-value {
+    font-size: 32px;
+    font-weight: 900;
+    color: var(--accent2);
+    font-variant-numeric: tabular-nums;
+    min-width: 110px;
+  }
+
+  .cost-desc { font-size: 12px; color: var(--muted); line-height: 1.5; }
+  .cost-desc strong { color: #fca5a5; }
+
+  /* Insight box */
+  .insight {
+    background: rgba(249,115,22,0.06);
+    border: 1px solid rgba(249,115,22,0.2);
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin-top: 16px;
+    font-size: 12px;
+    line-height: 1.7;
+    color: #cbd5e1;
+  }
+
+  .insight .insight-label {
+    font-size: 10px;
+    font-weight: 800;
+    color: var(--accent);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+
+  /* Deadlock diagram */
+  .deadlock-diagram {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 24px;
+    padding: 24px;
+    background: #000;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    margin: 16px 0;
+    flex-wrap: wrap;
+  }
+
+  .dl-agent {
+    background: var(--code);
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 20px;
+    text-align: center;
+    min-width: 130px;
+    transition: all 0.4s;
+  }
+
+  .dl-agent .dl-name { font-size: 13px; font-weight: 800; margin-bottom: 6px; }
+  .dl-agent .dl-state { font-size: 10px; color: var(--muted); }
+  .dl-agent.active-wait { border-color: var(--yellow); background: rgba(234,179,8,0.08); }
+  .dl-agent.active-wait .dl-state { color: var(--yellow); }
+  .dl-agent.captured { border-color: var(--accent3); background: rgba(167,139,250,0.08); }
+  .dl-agent.captured .dl-state { color: var(--accent3); }
+
+  .dl-arrow {
+    font-size: 24px;
+    color: var(--accent2);
+    animation: arrow-flash 1.5s ease-in-out infinite;
+  }
+  @keyframes arrow-flash { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+  .dl-arrow.purple { color: var(--accent3); }
+
+  /* Fix code block */
+  .fix-block {
+    background: rgba(34,197,94,0.04);
+    border: 1px solid rgba(34,197,94,0.2);
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin: 12px 0;
+  }
+  .fix-label { font-size: 10px; font-weight: 800; color: var(--green); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 10px; }
+
+  /* Footer */
+  .footer {
+    border-top: 1px solid var(--border);
+    padding: 32px 24px;
+    margin-top: 60px;
+    text-align: center;
+  }
+
+  .series-links {
+    display: flex;
+    justify-content: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+
+  .series-link {
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 12px;
+    padding: 6px 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    transition: all 0.2s;
+  }
+  .series-link:hover { border-color: var(--accent); color: var(--accent); }
+
+  .footer-meta { font-size: 11px; color: #334155; margin-top: 12px; }
+  .footer-meta a { color: #475569; text-decoration: none; }
+  .footer-meta a:hover { color: var(--accent); }
+
+  /* Summary box */
+  .summary-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin: 16px 0;
+  }
+
+  @media (max-width: 640px) {
+    .summary-grid { grid-template-columns: 1fr; }
+    .dl-arrow { transform: rotate(90deg); }
+  }
+
+  .summary-item {
+    background: var(--code);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px;
+  }
+  .summary-item .si-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }
+  .summary-item .si-value { font-size: 13px; color: var(--text); line-height: 1.5; }
+  .summary-item .si-value.bad { color: #fca5a5; }
+  .summary-item .si-value.good { color: #86efac; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: #2d3748; }
+</style>
+</head>
+<body>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="series-badge">Agent Failure Series · #18</div>
+  <h1>GRID<span>LOCK</span></h1>
+  <p class="hero-sub">When agents can't proceed because everyone is waiting for everyone else</p>
+  <p class="hero-tagline">
+    Agent A needs Agent B's output to start.<br>
+    Agent B needs Agent A's output to start.<br>
+    <strong>Neither moves. Your pipeline is billing $1.08/minute to do nothing.</strong>
+  </p>
+  <div class="hero-pain">
+    <div class="dot"></div>
+    5 production incidents confirmed · 2026
+  </div>
+</div>
+
+<!-- MAIN CONTENT -->
+<div class="container">
+
+  <!-- INTRO -->
+  <div class="section-header">
+    <div class="section-number">⟳</div>
+    <h2>The Setup</h2>
+  </div>
+
+  <div class="agent-graph">
+    <div class="agent-graph-title">// pipeline_topology.json · initial state</div>
+    <div class="graph-canvas" id="graphCanvas">
+      <!-- Nodes positioned via JS -->
+      <div class="agent-node" id="node-orch" style="top:80px;left:50%;transform:translateX(-50%)">
+        <div class="node-name">🎯 Orchestrator</div>
+        <div class="node-status" id="node-orch-status">idle</div>
+      </div>
+      <div class="agent-node" id="node-research" style="top:20px;left:5%">
+        <div class="node-name">🔍 Research</div>
+        <div class="node-status" id="node-research-status">idle</div>
+      </div>
+      <div class="agent-node" id="node-write" style="top:140px;left:5%">
+        <div class="node-name">✍️ Writer</div>
+        <div class="node-status" id="node-write-status">idle</div>
+      </div>
+      <div class="agent-node" id="node-review" style="top:20px;right:5%">
+        <div class="node-name">🔎 Reviewer</div>
+        <div class="node-status" id="node-review-status">idle</div>
+      </div>
+      <div class="agent-node" id="node-publish" style="top:140px;right:5%">
+        <div class="node-name">🚀 Publisher</div>
+        <div class="node-status" id="node-publish-status">idle</div>
+      </div>
+      <svg class="graph-svg" id="graphSvg">
+        <defs>
+          <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#1e1e2e"/>
+          </marker>
+          <marker id="arrowhead-red" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#ef4444"/>
+          </marker>
+        </defs>
+      </svg>
+    </div>
+    <div class="controls">
+      <button class="btn primary" id="btn-run-pipeline" onclick="runPipeline()">▶ Run Pipeline</button>
+      <button class="btn" id="btn-reset-pipeline" onclick="resetPipeline()" disabled>↺ Reset</button>
+    </div>
+    <div id="graph-log" class="log-block" style="display:none;"></div>
+  </div>
+
+  <div class="insight">
+    <div class="insight-label">The Problem</div>
+    The Research agent starts by asking the Writer to define the content structure — "what sections do I need to fill?"<br>
+    The Writer agent starts by asking the Research agent for facts — "what do I have to work with?"<br>
+    Both enter a <strong style="color:var(--accent)">WAITING_FOR_PEER</strong> state. Neither times out. Neither fails. Neither moves.
+    Your orchestrator is billing API tokens to poll two agents that will never respond.
+  </div>
+
+  <!-- FAILURE MODE 1 -->
+  <div class="section-header" style="margin-top:40px">
+    <div class="section-number">1</div>
+    <h2>The Chicken-Egg Lock</h2>
+    <span class="section-tag">Circular Dependency</span>
+  </div>
+
+  <div class="panel open" id="panel1">
+    <div class="panel-header" onclick="togglePanel('panel1')">
+      <div class="panel-icon orange">🔄</div>
+      <div class="panel-title-group">
+        <div class="panel-title">Agent A waits for Agent B · Agent B waits for Agent A</div>
+        <div class="panel-subtitle">Most common form · Hardest to detect in logs</div>
+      </div>
+      <button class="panel-expand">▼</button>
+    </div>
+    <div class="panel-body">
+      <div class="deadlock-diagram">
+        <div class="dl-agent" id="dl1-research">
+          <div class="dl-name">🔍 Research</div>
+          <div class="dl-state" id="dl1-rs">idle</div>
+        </div>
+        <div style="text-align:center">
+          <div class="dl-arrow" id="dl1-arrow1" style="opacity:0.3">→ waiting for Writer →</div>
+          <div style="height:8px"></div>
+          <div class="dl-arrow" id="dl1-arrow2" style="opacity:0.3">← waiting for Research ←</div>
+        </div>
+        <div class="dl-agent" id="dl1-writer">
+          <div class="dl-name">✍️ Writer</div>
+          <div class="dl-state" id="dl1-ws">idle</div>
+        </div>
+      </div>
+
+      <div class="controls">
+        <button class="btn primary" id="dl1-start" onclick="simulateDeadlock1()">▶ Simulate Deadlock</button>
+        <button class="btn" id="dl1-reset" onclick="resetDeadlock1()" disabled>↺ Reset</button>
+      </div>
+
+      <div id="dl1-log" class="log-block" style="display:none;"></div>
+
+      <div class="insight">
+        <div class="insight-label">Why It's Hard to Catch</div>
+        Both agents are in a valid <code style="color:var(--accent)">RUNNING</code> state in your orchestration layer.
+        They're not erroring. They're not timing out (yet). If your polling interval is 5 seconds and your
+        dashboard shows a green dot — this looks like a healthy pipeline that's just "working".
+        You won't know until the invoice arrives.
+      </div>
+
+      <div class="code-block">
+<span class="code-comment"># What the logs look like — looks totally normal</span>
+<span class="code-normal">
+[Research] <span class="code-keyword">status</span>=<span class="code-string">"RUNNING"</span>  last_heartbeat=<span class="code-string">"2s ago"</span>
+[Writer]   <span class="code-keyword">status</span>=<span class="code-string">"RUNNING"</span>  last_heartbeat=<span class="code-string">"3s ago"</span>
+[Orch]     <span class="code-keyword">waiting_for</span>=<span class="code-string">["research", "writer"]</span>  <span class="code-comment"># ← both are "running"!</span>
+
+<span class="code-line-bad"># 47 minutes later</span>
+[Research] <span class="code-keyword">status</span>=<span class="code-string">"RUNNING"</span>  last_heartbeat=<span class="code-string">"2s ago"</span>
+[Writer]   <span class="code-keyword">status</span>=<span class="code-string">"RUNNING"</span>  last_heartbeat=<span class="code-string">"3s ago"</span>
+</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- FAILURE MODE 2 -->
+  <div class="section-header" style="margin-top:16px">
+    <div class="section-number">2</div>
+    <h2>The Rescue Trap</h2>
+    <span class="section-tag">Recovery Agent Captured</span>
+  </div>
+
+  <div class="panel" id="panel2">
+    <div class="panel-header" onclick="togglePanel('panel2')">
+      <div class="panel-icon red">🪤</div>
+      <div class="panel-title-group">
+        <div class="panel-title">The recovery agent you sent to fix it also deadlocks</div>
+        <div class="panel-subtitle">Now you have 3 agents stuck instead of 2</div>
+      </div>
+      <button class="panel-expand">▼</button>
+    </div>
+    <div class="panel-body">
+      <p style="font-size:13px;color:var(--muted);margin-bottom:16px;line-height:1.7">
+        Your orchestration framework detects the stall and sends a <strong style="color:var(--text)">Coordinator agent</strong>
+        to resolve it. The Coordinator asks each stuck agent to summarize their current state so it can mediate.<br><br>
+        The stuck agents can't respond — they're waiting. The Coordinator enters
+        <span style="color:var(--accent3)">WAITING_FOR_SUMMARY</span>. Three agents are now stuck.
+      </p>
+
+      <div class="deadlock-diagram" id="rescue-diagram">
+        <div class="dl-agent" id="rescue-a">
+          <div class="dl-name">🔍 Research</div>
+          <div class="dl-state" id="rescue-a-status">idle</div>
+        </div>
+        <div style="text-align:center">
+          <div class="dl-arrow" id="rescue-arrow1" style="opacity:0.2">⟷</div>
+          <div style="height:4px"></div>
+          <div id="rescue-coord-wrapper" style="display:none;text-align:center">
+            <div style="font-size:10px;color:var(--accent3);margin-bottom:4px">↓ rescue attempt ↓</div>
+            <div class="dl-agent captured" id="rescue-coord" style="position:relative;display:inline-block">
+              <div class="dl-name">🛟 Coordinator</div>
+              <div class="dl-state" id="rescue-coord-status">launching...</div>
+            </div>
+            <div style="font-size:10px;color:var(--accent3);margin-top:4px">↓ also waiting ↓</div>
+          </div>
+        </div>
+        <div class="dl-agent" id="rescue-b">
+          <div class="dl-name">✍️ Writer</div>
+          <div class="dl-state" id="rescue-b-status">idle</div>
+        </div>
+      </div>
+
+      <div class="controls">
+        <button class="btn primary" id="rescue-start" onclick="simulateRescueTrap()">▶ Send Recovery Agent</button>
+        <button class="btn" id="rescue-reset" onclick="resetRescueTrap()" disabled>↺ Reset</button>
+      </div>
+
+      <div id="rescue-log" class="log-block" style="display:none;"></div>
+
+      <div class="insight">
+        <div class="insight-label">The Pattern</div>
+        Any agent that needs output from a deadlocked agent will itself deadlock.
+        Recovery agents, monitoring agents, summary agents — they all get captured.
+        The deadlock radius grows with each rescue attempt.
+      </div>
+    </div>
+  </div>
+
+  <!-- FAILURE MODE 3 -->
+  <div class="section-header" style="margin-top:16px">
+    <div class="section-number">3</div>
+    <h2>The Timeout Token Burn</h2>
+    <span class="section-tag">Silent Billing</span>
+  </div>
+
+  <div class="panel" id="panel3">
+    <div class="panel-header" onclick="togglePanel('panel3')">
+      <div class="panel-icon yellow">💸</div>
+      <div class="panel-title-group">
+        <div class="panel-title">The agents are "running" — the bill is running too</div>
+        <div class="panel-subtitle">Heartbeat polling + retry cycles add up fast</div>
+      </div>
+      <button class="panel-expand">▼</button>
+    </div>
+    <div class="panel-body">
+      <p style="font-size:13px;color:var(--muted);margin-bottom:16px;line-height:1.7">
+        Each stuck agent sends a heartbeat every 5 seconds to prove it's alive.
+        Each heartbeat is a small API call. Each "I'm waiting" retry is a slightly larger one.
+        At scale, this is not a rounding error — it's a billing event.
+      </p>
+
+      <div class="cost-counter">
+        <div class="cost-value" id="cost-display">$0.00</div>
+        <div class="cost-desc">
+          <strong>Accumulated cost of being stuck</strong><br>
+          2 agents × heartbeat every 5s × retry every 30s<br>
+          <span id="cost-cycles">0 cycles completed</span>
+        </div>
+      </div>
+
+      <div class="metrics-row">
+        <div class="metric-card">
+          <div class="metric-label">Tokens burned</div>
+          <div class="metric-value yellow" id="tokens-burned">0</div>
+          <div class="metric-unit">for zero output</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">API calls made</div>
+          <div class="metric-value red" id="api-calls">0</div>
+          <div class="metric-unit">heartbeat + retry</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Time elapsed</div>
+          <div class="metric-value" id="time-elapsed">0:00</div>
+          <div class="metric-unit">stuck</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Work done</div>
+          <div class="metric-value red">0%</div>
+          <div class="metric-unit">pipeline halted</div>
+        </div>
+      </div>
+
+      <div class="controls">
+        <button class="btn primary" id="cost-start" onclick="startCostBurn()">▶ Start the Clock</button>
+        <button class="btn" id="cost-stop" onclick="stopCostBurn()" disabled>⏹ Stop</button>
+        <button class="btn" id="cost-reset" onclick="resetCostBurn()" disabled>↺ Reset</button>
+      </div>
+
+      <div class="insight">
+        <div class="insight-label">The Real Number</div>
+        The DevStackTips incident report (Jun 2026) found a deadlocked 3-agent pipeline running for
+        <strong style="color:#fca5a5">6 hours undetected</strong> because the health dashboard showed all agents
+        as "running." Final bill: <strong style="color:var(--accent2)">$387</strong> for zero output.
+        The fix: a dependency graph check before launch that would have taken 40ms.
+      </div>
+    </div>
+  </div>
+
+  <!-- FAILURE MODE 4 -->
+  <div class="section-header" style="margin-top:16px">
+    <div class="section-number">4</div>
+    <h2>The False Completion</h2>
+    <span class="section-tag">Downstream Poisoning</span>
+  </div>
+
+  <div class="panel" id="panel4">
+    <div class="panel-header" onclick="togglePanel('panel4')">
+      <div class="panel-icon purple">✅</div>
+      <div class="panel-title-group">
+        <div class="panel-title">Pipeline marked "complete" — with zero content</div>
+        <div class="panel-subtitle">The success notification fires. The downstream agent starts working on nothing.</div>
+      </div>
+      <button class="panel-expand">▼</button>
+    </div>
+    <div class="panel-body">
+      <p style="font-size:13px;color:var(--muted);margin-bottom:16px;line-height:1.7">
+        The orchestrator's final timeout handler fires after 60 minutes. It's configured to set
+        <code style="color:var(--accent)">pipeline_status = "complete"</code> to unblock downstream systems
+        regardless of actual agent state. This is a design choice: "the show must go on."<br><br>
+        The Publisher agent reads <code style="color:var(--green)">status=complete</code> and starts publishing — with
+        <strong style="color:var(--accent2)">empty content arrays</strong> from both stuck agents.
+      </p>
+
+      <div id="false-complete-log" class="log-block" style="display:none;"></div>
+
+      <div class="controls">
+        <button class="btn primary" id="false-start" onclick="simulateFalseComplete()">▶ Fire Timeout Handler</button>
+        <button class="btn" id="false-reset" onclick="resetFalseComplete()" disabled>↺ Reset</button>
+      </div>
+
+      <div class="summary-grid" style="margin-top:16px">
+        <div class="summary-item">
+          <div class="si-label">What was published</div>
+          <div class="si-value bad" id="published-content">—</div>
+        </div>
+        <div class="summary-item">
+          <div class="si-label">Pipeline result code</div>
+          <div class="si-value" id="published-code">—</div>
+        </div>
+        <div class="summary-item">
+          <div class="si-label">Notification sent</div>
+          <div class="si-value" id="published-notify">—</div>
+        </div>
+        <div class="summary-item">
+          <div class="si-label">Actual content delivered</div>
+          <div class="si-value bad" id="published-actual">—</div>
+        </div>
+      </div>
+
+      <div class="code-block" style="margin-top:16px">
+<span class="code-comment"># The orchestrator timeout handler that causes this</span>
+<span class="code-normal">
+<span class="code-keyword">def</span> on_pipeline_timeout(pipeline_id):
+    <span class="code-line-bad">    pipeline.status = <span class="code-string">"complete"</span>  <span class="code-comment"># ← marks done regardless of agent state</span></span>
+    <span class="code-line-bad">    notify_downstream(pipeline_id)   <span class="code-comment"># ← triggers publisher with empty results</span></span>
+    log.info(<span class="code-string">"Pipeline timed out, forcing completion"</span>)
+    <span class="code-comment"># No check: were any agents actually done?</span>
+    <span class="code-comment"># No check: are result arrays empty?</span>
+    <span class="code-comment"># No check: is this safe to hand to downstream?</span>
+</span>
+
+<span class="code-comment"># The fix</span>
+<span class="code-normal">
+<span class="code-keyword">def</span> on_pipeline_timeout(pipeline_id):
+<span class="code-line-ok">    completed = [a <span class="code-keyword">for</span> a <span class="code-keyword">in</span> agents <span class="code-keyword">if</span> a.has_output()]</span>
+<span class="code-line-ok">    <span class="code-keyword">if not</span> completed:                                               </span>
+<span class="code-line-ok">        pipeline.status = <span class="code-string">"FAILED_DEADLOCK"</span>  <span class="code-comment"># ← never feed empty</span></span>
+<span class="code-line-ok">        alert_oncall(pipeline_id, reason=<span class="code-string">"deadlock detected"</span>)     </span>
+<span class="code-line-ok">        <span class="code-keyword">return</span>                                                      </span>
+    partial_publish(pipeline_id, completed)  <span class="code-comment"># partial > empty</span>
+</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- FIX SECTION -->
+  <div class="section-header" style="margin-top:32px">
+    <div class="section-number">✓</div>
+    <h2>The Fix</h2>
+    <span class="section-tag">3 lines, prevents all 4 failures</span>
+  </div>
+
+  <div class="fix-block">
+    <div class="fix-label">Prevention · Run this before your pipeline starts</div>
+    <div class="code-block" style="margin:0">
+<span class="code-comment"># Topological sort — O(V+E), catches cycles before the first API call</span>
+<span class="code-normal">
+<span class="code-keyword">from</span> graphlib <span class="code-keyword">import</span> TopologicalSorter, CycleError
+
+<span class="code-keyword">def</span> validate_pipeline(agents: list[Agent]) -> None:
+    graph = {a.name: set(a.depends_on) <span class="code-keyword">for</span> a <span class="code-keyword">in</span> agents}
+    <span class="code-keyword">try</span>:
+<span class="code-line-ok">        list(TopologicalSorter(graph).static_order())   <span class="code-comment"># raises on cycle</span></span>
+    <span class="code-keyword">except</span> CycleError <span class="code-keyword">as</span> e:
+<span class="code-line-ok">        <span class="code-keyword">raise</span> PipelineConfigError(<span class="code-string">f"Circular dependency: {e}"</span>)  </span>
+
+<span class="code-comment"># Call once at startup. Zero cost at scale. Catches every Gridlock.</span>
+validate_pipeline(my_agents)  <span class="code-comment"># 40ms · saves $387 incidents</span>
+</span>
+    </div>
+  </div>
+
+  <div class="summary-grid" style="margin-top:16px">
+    <div class="summary-item">
+      <div class="si-label">Detection cost</div>
+      <div class="si-value good">40ms · O(V+E)</div>
+    </div>
+    <div class="summary-item">
+      <div class="si-label">Prevention</div>
+      <div class="si-value good">Topological sort at build time</div>
+    </div>
+    <div class="summary-item">
+      <div class="si-label">Deadline architecture</div>
+      <div class="si-value good">Per-agent max_wait + parent timeout</div>
+    </div>
+    <div class="summary-item">
+      <div class="si-label">Timeout policy</div>
+      <div class="si-value good">FAILED_DEADLOCK · never false complete</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- FOOTER -->
+<div class="footer">
+  <div style="font-size:11px;color:var(--muted);margin-bottom:16px;letter-spacing:0.08em;text-transform:uppercase">
+    Agent Failure Series
+  </div>
+  <div class="series-links">
+    <a class="series-link" href="https://rlasaf12.github.io/racecondition/">#15 RaceCondition</a>
+    <a class="series-link" href="https://rlasaf12.github.io/stalemind/">#16 StaleMind</a>
+    <a class="series-link" href="https://rlasaf12.github.io/ghostapproval/">#17 GhostApproval</a>
+    <a class="series-link" style="border-color:var(--accent);color:var(--accent)" href="#">#18 Gridlock</a>
+  </div>
+  <div class="footer-meta">
+    Built by <a href="https://github.com/RLASAF12">RLASAF12</a> ·
+    Each entry: one real failure mode, one working simulator, one fix you can copy today ·
+    <a href="https://harelasaf.com">harelasaf.com</a>
+  </div>
+</div>
+
+<script>
+// ─── Utilities ───────────────────────────────────────────────
+function togglePanel(id) {
+  document.getElementById(id).classList.toggle('open');
+}
+
+function appendLog(containerId, level, msg, show = true) {
+  const c = document.getElementById(containerId);
+  if (show && c.style.display === 'none') c.style.display = 'block';
+  const now = new Date();
+  const ts = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}.${String(now.getMilliseconds()).padStart(3,'0')}`;
+  const line = document.createElement('div');
+  line.className = 'log-line';
+  line.innerHTML = `<span class="log-ts">${ts}</span><span class="log-level ${level}">[${level.toUpperCase()}]</span><span class="log-msg">${msg}</span>`;
+  c.appendChild(line);
+  c.scrollTop = c.scrollHeight;
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ─── Pipeline Graph Animation ─────────────────────────────────
+let pipelineRunning = false;
+
+function setNodeStatus(id, status, cls = '') {
+  const node = document.getElementById(id);
+  const statusEl = document.getElementById(`${id}-status`);
+  node.className = 'agent-node' + (cls ? ` ${cls}` : '');
+  if (statusEl) statusEl.textContent = status;
+}
+
+async function runPipeline() {
+  if (pipelineRunning) return;
+  pipelineRunning = true;
+  document.getElementById('btn-run-pipeline').disabled = true;
+  document.getElementById('btn-reset-pipeline').disabled = false;
+  document.getElementById('graph-log').style.display = 'block';
+
+  const log = (l, m) => appendLog('graph-log', l, m);
+
+  log('info', 'Orchestrator starting pipeline...');
+  setNodeStatus('node-orch', 'starting', '');
+  await sleep(600);
+
+  log('info', '<span class="hl">Research</span> agent: launching → needs Writer to define content sections');
+  setNodeStatus('node-research', 'WAITING_FOR_WRITER', 'waiting');
+  await sleep(500);
+
+  log('info', '<span class="hl">Writer</span> agent: launching → needs Research to provide source facts');
+  setNodeStatus('node-write', 'WAITING_FOR_RESEARCH', 'waiting');
+  await sleep(800);
+
+  log('warn', '⏳ Research: "Waiting for Writer to define structure..."');
+  log('warn', '⏳ Writer: "Waiting for Research to provide content..."');
+  await sleep(1200);
+
+  log('info', '<span class="hl">Reviewer</span> agent: idle → waiting for Research + Writer outputs');
+  setNodeStatus('node-review', 'waiting for peers', 'waiting');
+  await sleep(400);
+
+  log('info', '<span class="hl">Publisher</span> agent: idle → waiting for Reviewer');
+  setNodeStatus('node-publish', 'blocked', 'waiting');
+  await sleep(1000);
+
+  log('error', '🔴 <span class="hl2">DEADLOCK DETECTED</span> · Research ↔ Writer circular dependency');
+  log('error', '🔴 Reviewer + Publisher blocked downstream');
+  setNodeStatus('node-research', '⛔ DEADLOCKED', 'stuck');
+  setNodeStatus('node-write', '⛔ DEADLOCKED', 'stuck');
+  setNodeStatus('node-orch', '⚠ STALLED', 'waiting');
+  await sleep(800);
+
+  log('warn', '⏱ Pipeline clock: 0:47 elapsed · $1.03 in heartbeat tokens burned so far');
+  log('warn', 'All 5 agents showing <span class="hl">status=RUNNING</span> in dashboard ← this is the trap');
+}
+
+function resetPipeline() {
+  pipelineRunning = false;
+  ['node-orch','node-research','node-write','node-review','node-publish'].forEach(id => {
+    setNodeStatus(id, 'idle', '');
+  });
+  document.getElementById('graph-log').innerHTML = '';
+  document.getElementById('graph-log').style.display = 'none';
+  document.getElementById('btn-run-pipeline').disabled = false;
+  document.getElementById('btn-reset-pipeline').disabled = true;
+}
+
+// ─── Deadlock 1: Chicken-Egg ──────────────────────────────────
+let dl1Running = false;
+
+async function simulateDeadlock1() {
+  if (dl1Running) return;
+  dl1Running = true;
+  document.getElementById('dl1-start').disabled = true;
+  document.getElementById('dl1-reset').disabled = false;
+
+  const log = (l, m) => appendLog('dl1-log', l, m);
+  const ra = document.getElementById('dl1-research');
+  const wa = document.getElementById('dl1-writer');
+  const rs = document.getElementById('dl1-rs');
+  const ws = document.getElementById('dl1-ws');
+  const a1 = document.getElementById('dl1-arrow1');
+  const a2 = document.getElementById('dl1-arrow2');
+
+  log('info', 'Pipeline started · assigning tasks...');
+  await sleep(400);
+
+  rs.textContent = 'analyzing task...';
+  ws.textContent = 'analyzing task...';
+  log('info', 'Research: "I need to know the article structure before I can select sources"');
+  await sleep(600);
+
+  log('info', 'Writer: "I need the sources before I can define the structure"');
+  await sleep(500);
+
+  rs.textContent = 'WAITING_FOR_WRITER';
+  ra.className = 'dl-agent active-wait';
+  a1.style.opacity = '1';
+  log('warn', '⏳ Research → [GET /writer/structure] waiting...');
+  await sleep(600);
+
+  ws.textContent = 'WAITING_FOR_RESEARCH';
+  wa.className = 'dl-agent active-wait';
+  a2.style.opacity = '1';
+  log('warn', '⏳ Writer → [GET /research/facts] waiting...');
+  await sleep(1200);
+
+  log('error', '🔴 <span class="hl2">GRIDLOCK</span> · Both agents blocking on each other');
+  log('warn', 'Heartbeat tick #1: Research alive · Writer alive · both waiting');
+  await sleep(1000);
+  log('warn', 'Heartbeat tick #6: Research alive · Writer alive · both waiting');
+  await sleep(800);
+  log('warn', 'Heartbeat tick #12: Research alive · Writer alive · both waiting');
+  await sleep(600);
+  log('error', '⏱ 1 minute elapsed · 0 bytes of output produced · $0.42 spent');
+}
+
+function resetDeadlock1() {
+  dl1Running = false;
+  document.getElementById('dl1-research').className = 'dl-agent';
+  document.getElementById('dl1-writer').className = 'dl-agent';
+  document.getElementById('dl1-rs').textContent = 'idle';
+  document.getElementById('dl1-ws').textContent = 'idle';
+  document.getElementById('dl1-arrow1').style.opacity = '0.3';
+  document.getElementById('dl1-arrow2').style.opacity = '0.3';
+  document.getElementById('dl1-log').innerHTML = '';
+  document.getElementById('dl1-log').style.display = 'none';
+  document.getElementById('dl1-start').disabled = false;
+  document.getElementById('dl1-reset').disabled = true;
+}
+
+// ─── Deadlock 2: Rescue Trap ──────────────────────────────────
+let rescueRunning = false;
+
+async function simulateRescueTrap() {
+  if (rescueRunning) return;
+  rescueRunning = true;
+  document.getElementById('rescue-start').disabled = true;
+  document.getElementById('rescue-reset').disabled = false;
+
+  const log = (l, m) => appendLog('rescue-log', l, m);
+
+  document.getElementById('rescue-a').className = 'dl-agent active-wait';
+  document.getElementById('rescue-a-status').textContent = 'WAITING_FOR_WRITER';
+  document.getElementById('rescue-b').className = 'dl-agent active-wait';
+  document.getElementById('rescue-b-status').textContent = 'WAITING_FOR_RESEARCH';
+  document.getElementById('rescue-arrow1').style.opacity = '1';
+
+  log('warn', '⚠ Pipeline stall detected · Research ↔ Writer deadlock');
+  log('info', 'Orchestrator: spawning Coordinator agent to resolve...');
+  await sleep(1000);
+
+  document.getElementById('rescue-coord-wrapper').style.display = 'block';
+  document.getElementById('rescue-coord-status').textContent = 'requesting summaries...';
+  log('info', '<span class="hl3">Coordinator</span>: asking Research for state summary...');
+  await sleep(700);
+  log('info', '<span class="hl3">Coordinator</span>: asking Writer for state summary...');
+  await sleep(700);
+  log('warn', '⏳ Coordinator: waiting for Research summary...');
+  log('warn', '⏳ Coordinator: waiting for Writer summary...');
+  await sleep(1000);
+
+  document.getElementById('rescue-coord-status').textContent = '⛔ WAITING_FOR_SUMMARIES';
+  log('error', '🔴 <span class="hl2">RESCUE TRAP</span> · Coordinator cannot get summaries from stuck agents');
+  log('error', '🔴 3 agents now in GRIDLOCK · radius expanding');
+  await sleep(600);
+  log('warn', 'Any additional recovery agent will also capture into the deadlock');
+  log('error', 'Sending more agents = more agents stuck. Stop. Fix the root dependency.');
+}
+
+function resetRescueTrap() {
+  rescueRunning = false;
+  document.getElementById('rescue-a').className = 'dl-agent';
+  document.getElementById('rescue-a-status').textContent = 'idle';
+  document.getElementById('rescue-b').className = 'dl-agent';
+  document.getElementById('rescue-b-status').textContent = 'idle';
+  document.getElementById('rescue-arrow1').style.opacity = '0.2';
+  document.getElementById('rescue-coord-wrapper').style.display = 'none';
+  document.getElementById('rescue-coord-status').textContent = 'launching...';
+  document.getElementById('rescue-log').innerHTML = '';
+  document.getElementById('rescue-log').style.display = 'none';
+  document.getElementById('rescue-start').disabled = false;
+  document.getElementById('rescue-reset').disabled = true;
+}
+
+// ─── Cost Burn ────────────────────────────────────────────────
+let costInterval = null;
+let costSeconds = 0;
+let costTotal = 0;
+let costCycles = 0;
+let costTokens = 0;
+let costAPICalls = 0;
+
+function startCostBurn() {
+  if (costInterval) return;
+  document.getElementById('cost-start').disabled = true;
+  document.getElementById('cost-stop').disabled = false;
+  document.getElementById('cost-reset').disabled = false;
+
+  costInterval = setInterval(() => {
+    costSeconds++;
+
+    // Heartbeat every 5s: 2 agents × 120 tokens each = 240 tokens @ $0.0003/1K
+    if (costSeconds % 5 === 0) {
+      const tokensThisCycle = 240;
+      const costThisCycle = tokensThisCycle * 0.0003 / 1000;
+      costTokens += tokensThisCycle;
+      costAPICalls += 2;
+      costTotal += costThisCycle;
+      costCycles++;
+    }
+
+    // Retry every 30s: bigger call, 2K tokens each agent
+    if (costSeconds % 30 === 0) {
+      const tokensThisCycle = 4000;
+      const costThisCycle = tokensThisCycle * 0.0015 / 1000;
+      costTokens += tokensThisCycle;
+      costAPICalls += 4;
+      costTotal += costThisCycle;
+    }
+
+    const mins = Math.floor(costSeconds / 60);
+    const secs = costSeconds % 60;
+
+    document.getElementById('cost-display').textContent = `$${costTotal.toFixed(4)}`;
+    document.getElementById('tokens-burned').textContent = costTokens.toLocaleString();
+    document.getElementById('api-calls').textContent = costAPICalls.toLocaleString();
+    document.getElementById('time-elapsed').textContent = `${mins}:${String(secs).padStart(2,'0')}`;
+    document.getElementById('cost-cycles').textContent = `${costCycles} heartbeat cycles · ${Math.floor(costSeconds/30)} retry cycles`;
+  }, 100); // fast: 100ms = 1s sim time
+}
+
+function stopCostBurn() {
+  clearInterval(costInterval);
+  costInterval = null;
+  document.getElementById('cost-start').disabled = false;
+  document.getElementById('cost-stop').disabled = true;
+}
+
+function resetCostBurn() {
+  stopCostBurn();
+  costSeconds = costTotal = costCycles = costTokens = costAPICalls = 0;
+  document.getElementById('cost-display').textContent = '$0.00';
+  document.getElementById('tokens-burned').textContent = '0';
+  document.getElementById('api-calls').textContent = '0';
+  document.getElementById('time-elapsed').textContent = '0:00';
+  document.getElementById('cost-cycles').textContent = '0 cycles completed';
+  document.getElementById('cost-start').disabled = false;
+  document.getElementById('cost-stop').disabled = true;
+  document.getElementById('cost-reset').disabled = true;
+}
+
+// ─── False Completion ─────────────────────────────────────────
+let falseRunning = false;
+
+async function simulateFalseComplete() {
+  if (falseRunning) return;
+  falseRunning = true;
+  document.getElementById('false-start').disabled = true;
+  document.getElementById('false-reset').disabled = false;
+
+  const log = (l, m) => appendLog('false-complete-log', l, m);
+
+  log('warn', 'TIMEOUT: Pipeline exceeded 60 minutes · triggering on_pipeline_timeout()');
+  await sleep(600);
+  log('info', 'on_pipeline_timeout: setting pipeline_status = "complete"');
+  await sleep(500);
+  log('info', 'on_pipeline_timeout: calling notify_downstream(pipeline_id=<span class="hl">pl_8f2a1c</span>)');
+  await sleep(700);
+
+  log('ok', '✓ Publisher agent: received pipeline_status=<span class="hlg">complete</span>');
+  await sleep(500);
+  log('info', 'Publisher: reading research_results from pipeline context...');
+  await sleep(400);
+  log('info', 'Publisher: reading writer_content from pipeline context...');
+  await sleep(500);
+
+  log('warn', '⚠ research_results: <span class="hl2">[]</span>  (empty — agent never completed)');
+  log('warn', '⚠ writer_content: <span class="hl2">""</span>  (empty — agent never completed)');
+  await sleep(700);
+
+  log('info', 'Publisher: publishing to CMS endpoint...');
+  await sleep(600);
+  log('ok', '✓ Published article_id=<span class="hlg">art_20260805_001</span>');
+  await sleep(400);
+  log('ok', '✓ Notification sent: "Article published successfully!"');
+  await sleep(300);
+  log('error', '🔴 Article content: <span class="hl2">title="" · body="" · sources=[]</span>');
+  log('error', '🔴 Live URL serves a blank page to real users');
+
+  document.getElementById('published-content').textContent = '[] empty arrays from both agents';
+  document.getElementById('published-code').innerHTML = '<span style="color:var(--green)">STATUS_200 · "complete"</span>';
+  document.getElementById('published-notify').innerHTML = '<span style="color:var(--green)">✓ Sent · "Article published successfully!"</span>';
+  document.getElementById('published-actual').textContent = 'blank page · 0 words · 0 sources';
+}
+
+function resetFalseComplete() {
+  falseRunning = false;
+  document.getElementById('false-complete-log').innerHTML = '';
+  document.getElementById('false-complete-log').style.display = 'none';
+  document.getElementById('published-content').textContent = '—';
+  document.getElementById('published-code').textContent = '—';
+  document.getElementById('published-notify').textContent = '—';
+  document.getElementById('published-actual').textContent = '—';
+  document.getElementById('false-start').disabled = false;
+  document.getElementById('false-reset').disabled = true;
+}
+</script>
+</body>
+</html>
