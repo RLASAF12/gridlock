@@ -1,3 +1,5 @@
+> **Archived.** This repo moved to [RLASAF12/agent-failure-lab](https://github.com/RLASAF12/agent-failure-lab/tree/main/gridlock) (folder `gridlock/`, full history preserved). Archived 2026-10-04.
+
 # GRIDLOCK — Agent Failure Series #18
 
 ![Series](https://img.shields.io/badge/Agent%20Failure%20Series-%2318-f97316?style=flat-square)
